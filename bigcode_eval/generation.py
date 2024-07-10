@@ -51,6 +51,7 @@ def parallel_generations(
         save_every_k_tasks: int = -1,
         intermediate_generations: Optional[List[Optional[List[Optional[str]]]]] = None,
         intermediate_save_generations_path: Optional[str] = None,
+        use_habana=False
 ):
     if args.load_generations_path:
         # load generated code
@@ -76,7 +77,9 @@ def parallel_generations(
     # The input_length / start_length set to 0 for now will be adjusted later
     # Check if the task has a custom check_fn method for the stopping criteria
     if task.stop_words and tokenizer.eos_token:
-        task.stop_words.append(tokenizer.eos_token)    
+        # padding same as eos cannot be delimiter as gaudi output is padded
+        if not (use_habana and tokenizer.eos_token == tokenizer.pad_token):
+            task.stop_words.append(tokenizer.eos_token)
     if hasattr(task, "check_fn"):
         stopping_criteria.append(
             EndOfFunctionCriteria(0, task.stop_words, tokenizer, task.check_fn)
@@ -132,7 +135,10 @@ def parallel_generations(
         ds_loader = accelerator.prepare(ds_loader)
     elif not is_loaded_in_8bit and not is_loaded_in_4bit:
         # we only wrap data loader to avoid extra memory occupation
-        model = model.to(accelerator.device)
+        if not use_habana:
+            model = model.to(accelerator.device)
+        else:
+            model = model.to("hpu")
         ds_loader = accelerator.prepare(ds_loader)
     else:
         # model.to() is not supported for 8bit and 4bit models
@@ -154,6 +160,7 @@ def parallel_generations(
         save_every_k_tasks=save_every_k_tasks,
         intermediate_generations=intermediate_generations,
         intermediate_save_generations_path=intermediate_save_generations_path,
+        use_habana=use_habana,
         **gen_kwargs,
     )
     return generations

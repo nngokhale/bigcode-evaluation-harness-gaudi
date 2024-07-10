@@ -237,6 +237,7 @@ def complete_code(
     save_every_k_tasks: int = -1,
     intermediate_generations: Optional[List[Optional[List[Optional[str]]]]] = None,
     intermediate_save_generations_path: Optional[str] = None,
+    use_habana=False,
     **gen_kwargs,
 ):
     """Generate multiple codes for each task in the dataset using multiple GPUs with accelerate.
@@ -301,7 +302,8 @@ def complete_code(
                     # We want to ignore this error in order to reproduce old results with mbpp.
                     try:
                         generated_tokens = model.generate(
-                            input_ids=inputs,
+                            input_ids=inputs if not use_habana else inputs.to("hpu"),
+                            pad_token_id=tokenizer.pad_token_id,
                             num_return_sequences=batch_size,
                             **gen_kwargs,
                         )
@@ -362,7 +364,6 @@ def complete_code(
         code_gens,
         gen_token_dict,
     )
-
     generations.extend(code_gens)
     return generations
 

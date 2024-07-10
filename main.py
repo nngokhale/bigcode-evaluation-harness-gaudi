@@ -18,7 +18,6 @@ from bigcode_eval.arguments import EvalArguments
 from bigcode_eval.evaluator import Evaluator
 from bigcode_eval.tasks import ALL_TASKS
 
-
 class MultiChoice:
     def __init__(self, choices):
         self.choices = choices
@@ -210,6 +209,11 @@ def parse_args():
         action="store_true",
         help="Don't run generation but benchmark groundtruth (useful for debugging)",
     )
+    parser.add_argument(
+        "--use_habana",
+        action="store_true",
+        help="Use HPU",
+    )
     return parser.parse_args()
 
 
@@ -242,6 +246,11 @@ def main():
     accelerator = Accelerator()
     if accelerator.is_main_process:
         print(f"Selected Tasks: {task_names}")
+
+    if args.use_habana:
+        from optimum.habana.transformers.modeling_utils import adapt_transformers_to_gaudi
+        from habana_frameworks.torch.hpu import wrap_in_hpu_graph
+        adapt_transformers_to_gaudi()
 
     results = {}
     if args.load_generations_path:
@@ -309,6 +318,10 @@ def main():
             raise ValueError(
                 f"Non valid modeltype {args.modeltype}, choose from: causal, seq2seq"
             )
+
+        if args.use_habana:
+            model = model.eval().to("hpu")
+            model = wrap_in_hpu_graph(model)
 
         if args.peft_model:
             from peft import PeftModel  # dynamic import to avoid dependency on peft
